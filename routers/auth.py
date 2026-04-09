@@ -35,30 +35,48 @@ def _cfg():
     }
 
 
-# ─── Utenti in memoria (preview / fallback) ─────────────────────────────────
-# In produzione saranno letti da PostgreSQL
-
-_USERS = {
-    "admin": {
-        "username": "admin",
-        "password_hash": _pwd_context.hash(os.getenv("APP_PASSWORD", "admin")),
-        "totp_secret": None,   # None = TOTP non ancora configurato
-        "email": "admin@diozzi.it",
-        "ruolo": "admin",
-        "attivo": True,
-    },
-}
-
+# ─── Utenti da PostgreSQL ────────────────────────────────────────────────────
 
 def _get_user(username: str) -> dict | None:
-    """Cerca utente. In futuro leggerà da PostgreSQL."""
-    return _USERS.get(username)
+    """Legge l'utente dal database PostgreSQL."""
+    try:
+        from services.database import SessionLocal
+        from models.db_models import Utente
+        db = SessionLocal()
+        try:
+            u = db.query(Utente).filter(Utente.username == username).first()
+            if not u:
+                return None
+            return {
+                "username": u.username,
+                "password_hash": u.password_hash,
+                "totp_secret": u.totp_secret,
+                "email": u.email or "",
+                "ruolo": u.ruolo or "utente",
+                "attivo": bool(u.attivo),
+            }
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[Auth] Errore DB _get_user: {e}")
+        return None
 
 
-def _save_user_totp(username: str, secret: str):
-    """Salva il TOTP secret. In futuro scriverà su PostgreSQL."""
-    if username in _USERS:
-        _USERS[username]["totp_secret"] = secret
+def _save_user_totp(username: str, secret: str | None):
+    """Salva/rimuove il TOTP secret nel database PostgreSQL."""
+    try:
+        from services.database import SessionLocal
+        from models.db_models import Utente
+        db = SessionLocal()
+        try:
+            u = db.query(Utente).filter(Utente.username == username).first()
+            if u:
+                u.totp_secret = secret
+                db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[Auth] Errore DB _save_user_totp: {e}")
 
 
 # ─── Modelli ─────────────────────────────────────────────────────────────────

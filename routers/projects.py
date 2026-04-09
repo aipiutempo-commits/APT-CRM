@@ -1,55 +1,59 @@
-"""
-Router Progetti.
-"""
+"""Router Progetti – PostgreSQL via SQLAlchemy."""
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
 from models.project import Progetto, ProgettoCreate, ProgettoUpdate
+from models.db_models import Progetto as ProgettoORM
 from routers.auth import get_current_user
-from services.google_sheets import SHEET_PROGETTI, get_sheets_service
+from services.database import get_db, to_dict, log_action
 
 router = APIRouter(prefix="/api/progetti", tags=["progetti"])
 
 
-@router.get("/", response_model=list[Progetto], summary="Lista progetti")
-async def lista_progetti(current_user: str = Depends(get_current_user)):
-    return get_sheets_service().get_all(SHEET_PROGETTI)
+@router.get("/", response_model=list[Progetto])
+async def lista_progetti(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    records = db.query(ProgettoORM).order_by(ProgettoORM.data_creazione.desc()).all()
+    return [to_dict(r) for r in records]
 
 
-@router.get("/{progetto_id}", response_model=Progetto, summary="Dettaglio progetto")
-async def get_progetto(progetto_id: str, current_user: str = Depends(get_current_user)):
-    record = get_sheets_service().get_by_id(SHEET_PROGETTI, progetto_id)
-    if not record:
+@router.get("/{progetto_id}", response_model=Progetto)
+async def get_progetto(progetto_id: str, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    r = db.query(ProgettoORM).filter(ProgettoORM.id == progetto_id).first()
+    if not r:
         raise HTTPException(status_code=404, detail="Progetto non trovato")
-    return record
+    return to_dict(r)
 
 
-@router.post("/", response_model=Progetto, status_code=201, summary="Crea progetto")
-async def crea_progetto(data: ProgettoCreate, current_user: str = Depends(get_current_user)):
-    sheets = get_sheets_service()
-    nuovo = sheets.create(SHEET_PROGETTI, data.model_dump())
-    sheets.log_action("CREATE", "Progetti", nuovo.get("id", ""), current_user, data.nome)
-    return nuovo
+@router.post("/", response_model=Progetto, status_code=201)
+async def crea_progetto(data: ProgettoCreate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    obj = ProgettoORM(**data.model_dump())
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    log_action(db, "CREATE", "Progetti", obj.id, current_user, data.nome)
+    return to_dict(obj)
 
 
-@router.put("/{progetto_id}", response_model=Progetto, summary="Aggiorna progetto")
-async def aggiorna_progetto(
-    progetto_id: str,
-    data: ProgettoUpdate,
-    current_user: str = Depends(get_current_user),
-):
-    sheets = get_sheets_service()
-    aggiornamenti = {k: v for k, v in data.model_dump().items() if v is not None}
-    updated = sheets.update(SHEET_PROGETTI, progetto_id, aggiornamenti)
-    if not updated:
+@router.put("/{progetto_id}", response_model=Progetto)
+async def aggiorna_progetto(progetto_id: str, data: ProgettoUpdate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    obj = db.query(ProgettoORM).filter(ProgettoORM.id == progetto_id).first()
+    if not obj:
         raise HTTPException(status_code=404, detail="Progetto non trovato")
-    sheets.log_action("UPDATE", "Progetti", progetto_id, current_user, str(aggiornamenti))
-    return updated
+    updates = {k: v for k, v in data.model_dump().items() if v is not None}
+    for k, v in updates.items():
+        setattr(obj, k, v)
+    db.commit()
+    db.refresh(obj)
+    log_action(db, "UPDATE", "Progetti", progetto_id, current_user, str(updates))
+    return to_dict(obj)
 
 
-@router.delete("/{progetto_id}", status_code=204, summary="Elimina progetto")
-async def elimina_progetto(progetto_id: str, current_user: str = Depends(get_current_user)):
-    ok = get_sheets_service().delete(SHEET_PROGETTI, progetto_id)
-    if not ok:
+@router.delete("/{progetto_id}", status_code=204)
+async def elimina_progetto(progetto_id: str, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    obj = db.query(ProgettoORM).filter(ProgettoORM.id == progetto_id).first()
+    if not obj:
         raise HTTPException(status_code=404, detail="Progetto non trovato")
-    get_sheets_service().log_action("DELETE", "Progetti", progetto_id, current_user)
+    db.delete(obj)
+    db.commit()
+    log_action(db, "DELETE", "Progetti", progetto_id, current_user)

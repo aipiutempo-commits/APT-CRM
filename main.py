@@ -17,30 +17,32 @@ from fastapi.staticfiles import StaticFiles
 # Carica le variabili d'ambiente dal file .env
 load_dotenv()
 
-from routers import auth, clients, dashboard, logs, offers, projects, suppliers, tasks
-from services.scheduler import avvia_scheduler, ferma_scheduler
+from routers import auth, clients, dashboard, logs, offers, projects, suppliers, tasks, contatti
+from services.database import init_db
 
 # ─── Lifespan (avvio / spegnimento) ─────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Avvio
-    avvia_scheduler()
+    # Avvio: crea tabelle e utente admin se non esistono
+    try:
+        init_db()
+        print("[CRM] Database inizializzato")
+    except Exception as e:
+        print(f"[CRM] Errore inizializzazione DB: {e}")
     yield
-    # Spegnimento
-    ferma_scheduler()
 
 
 # ─── App FastAPI ─────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title=os.getenv("APP_TITLE", "CRM Personale"),
-    description="CRM leggero con Google Sheets come database – PWA mobile-first",
-    version="1.0.0",
+    description="CRM leggero con PostgreSQL – PWA mobile-first",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
-# CORS (utile in sviluppo; in produzione Nginx gestisce il dominio)
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -59,6 +61,7 @@ app.include_router(projects.router)
 app.include_router(offers.router)
 app.include_router(tasks.router)
 app.include_router(logs.router)
+app.include_router(contatti.router)
 
 # ─── File statici (frontend PWA) ─────────────────────────────────────────────
 
@@ -68,7 +71,6 @@ if static_dir.exists():
 
     @app.get("/", include_in_schema=False)
     async def index():
-        """Serve la SPA principale."""
         return FileResponse(str(static_dir / "index.html"))
 
     @app.get("/manifest.json", include_in_schema=False)
@@ -77,7 +79,6 @@ if static_dir.exists():
 
     @app.get("/sw.js", include_in_schema=False)
     async def service_worker():
-        """Il service worker deve essere servito dalla root per avere scope completo."""
         return FileResponse(
             str(static_dir / "sw.js"),
             media_type="application/javascript",

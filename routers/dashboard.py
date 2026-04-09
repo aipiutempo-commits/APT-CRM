@@ -1,17 +1,12 @@
-"""
-Router Dashboard – KPI e dati aggregati per la home.
-"""
+"""Router Dashboard – KPI aggregati da PostgreSQL."""
 
 from datetime import date
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
+from models.db_models import Offerta, Attivita, Progetto
 from routers.auth import get_current_user
-from services.google_sheets import (
-    SHEET_ATTIVITA,
-    SHEET_OFFERTE,
-    SHEET_PROGETTI,
-    get_sheets_service,
-)
+from services.database import get_db, to_dict
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -19,7 +14,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 def _parse_date(s: str):
     if not s:
         return None
-    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
         try:
             from datetime import datetime
             return datetime.strptime(s.strip(), fmt).date()
@@ -28,44 +23,36 @@ def _parse_date(s: str):
     return None
 
 
-@router.get("/", summary="KPI e dati dashboard")
-async def get_dashboard(current_user: str = Depends(get_current_user)):
-    sheets = get_sheets_service()
+@router.get("/")
+async def get_dashboard(db: Session = Depends(get_db),
+                        current_user: str = Depends(get_current_user)):
     oggi = date.today()
 
-    offerte = sheets.get_all(SHEET_OFFERTE)
-    tasks = sheets.get_all(SHEET_ATTIVITA)
-    progetti = sheets.get_all(SHEET_PROGETTI)
+    offerte = db.query(Offerta).all()
+    tasks = db.query(Attivita).all()
+    progetti = db.query(Progetto).all()
 
-    # Offerte scadute (Inviata + scadenza passata)
     offerte_scadute = [
-        o for o in offerte
-        if o.get("stato") == "Inviata"
-        and _parse_date(o.get("scadenza_attesa", ""))
-        and _parse_date(o.get("scadenza_attesa", "")) < oggi
+        to_dict(o) for o in offerte
+        if o.stato == "Inviata"
+        and _parse_date(o.scadenza_attesa or "")
+        and _parse_date(o.scadenza_attesa) < oggi
     ]
 
-    # Task urgenti: alta priorità, non completati
-    task_urgenti = [
-        t for t in tasks
-        if t.get("priorita") == "Alta" and t.get("stato") != "Fatto"
-    ]
+    task_urgenti = [t for t in tasks if t.priorita == "Alta" and t.stato != "Fatto"]
 
-    # Progetti attivi
-    progetti_attivi = [p for p in progetti if p.get("stato") == "Attivo"]
+    progetti_attivi = [p for p in progetti if p.stato == "Attivo"]
 
-    # Da fare oggi: task non completati con scadenza <= oggi
     da_fare_oggi = [
-        t for t in tasks
-        if t.get("stato") != "Fatto"
-        and _parse_date(t.get("scadenza", ""))
-        and _parse_date(t.get("scadenza", "")) <= oggi
+        to_dict(t) for t in tasks
+        if t.stato != "Fatto"
+        and _parse_date(t.scadenza or "")
+        and _parse_date(t.scadenza) <= oggi
     ]
 
-    # Offerte per stato (per grafico)
     stati_offerte: dict = {}
     for o in offerte:
-        s = o.get("stato", "Sconosciuto")
+        s = o.stato or "Sconosciuto"
         stati_offerte[s] = stati_offerte.get(s, 0) + 1
 
     return {
@@ -76,7 +63,7 @@ async def get_dashboard(current_user: str = Depends(get_current_user)):
             "offerte_totali": len(offerte),
             "task_totali": len(tasks),
         },
-        "da_fare_oggi": da_fare_oggi[:10],   # max 10 nella dashboard
+        "da_fare_oggi": da_fare_oggi[:10],
         "offerte_scadute": offerte_scadute[:5],
         "stati_offerte": stati_offerte,
     }
