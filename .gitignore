@@ -1,0 +1,28 @@
+# ─── Ambiente / Secrets ───
+.env
+credentials.json
+*.pem
+*.key
+
+# ─── Python ───
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# ─── Node ───
+node_modules/
+
+# ─── IDE ───
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# ─── File generati ───
+generate_excel.py
+*.log
+
+# ─── Claude ───
+.claude/

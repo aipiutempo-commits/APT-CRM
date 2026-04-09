@@ -1,0 +1,51 @@
+version: "3.8"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DIOZZI CRM – Docker Compose per Coolify
+# ═══════════════════════════════════════════════════════════════════════════
+# Su Coolify: importa questo file o usa il Dockerfile direttamente.
+# PostgreSQL va creato come servizio separato su Coolify.
+# ═══════════════════════════════════════════════════════════════════════════
+
+services:
+  crm:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # ─── Database PostgreSQL (compilare con i dati Coolify) ───
+      DATABASE_URL: "postgresql://crm_user:${DB_PASSWORD}@postgres:5432/diozzi_crm"
+
+      # ─── JWT ───
+      JWT_SECRET: "${JWT_SECRET:-change_me_in_production}"
+      JWT_ALGORITHM: "HS256"
+      JWT_EXPIRE_MINUTES: "1440"
+
+      # ─── App ───
+      APP_NAME: "DIOZZI CRM"
+      APP_ENV: "production"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: diozzi_crm
+      POSTGRES_USER: crm_user
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-cambia_questa_password}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5432:5432"    # Esposto per n8n
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm_user -d diozzi_crm"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:

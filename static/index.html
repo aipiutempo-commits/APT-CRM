@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#F2EBE3">
+  <title>DIOZZI CRM</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     LOGIN
+═══════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>DIOZZI CRM</h1>
+    <p>Inserisci le credenziali per accedere</p>
+
+    <!-- Step 1: Username + Password -->
+    <div id="login-step-password">
+      <div class="form-grid" style="gap:14px">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="login-username" value="admin" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <div id="login-error" style="color:var(--danger);font-size:13px;min-height:18px"></div>
+        <button class="btn btn-primary" id="btn-login" style="width:100%;justify-content:center;padding:13px">
+          Accedi
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Codice OTP (Google Authenticator) -->
+    <div id="login-step-otp" style="display:none">
+      <div class="form-grid" style="gap:14px">
+        <div style="text-align:center;margin-bottom:8px">
+          <div style="font-size:36px;margin-bottom:8px"><i data-lucide="shield-check" style="width:40px;height:40px;color:var(--accent)"></i></div>
+          <p style="color:var(--text2);font-size:13px">Inserisci il codice a 6 cifre<br>dal tuo Google Authenticator</p>
+        </div>
+        <div class="form-group">
+          <label>Codice OTP</label>
+          <input type="text" id="otp-input" maxlength="6" inputmode="numeric" pattern="[0-9]*"
+                 placeholder="000000" autocomplete="one-time-code"
+                 style="text-align:center;font-size:24px;font-weight:700;letter-spacing:8px;padding:14px">
+        </div>
+        <div id="login-error" style="color:var(--danger);font-size:13px;min-height:18px"></div>
+        <button class="btn btn-primary" id="btn-verify-otp" style="width:100%;justify-content:center;padding:13px">
+          Verifica OTP
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('login-step-otp').style.display='none';document.getElementById('login-step-password').style.display='block'" style="width:100%;justify-content:center">
+          Torna al login
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     APP SHELL
+═══════════════════════════════════════════ -->
+<div id="app" style="display:none">
+
+  <!-- Overlay mobile -->
+  <div id="overlay"></div>
+
+  <!-- ─── Sidebar ──────────────────────────────────── -->
+  <nav id="sidebar">
+    <div class="logo">
+      <span>DIOZZI CRM</span>
+      <small>CRM Personale</small>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Principale</div>
+      <a class="nav-item" data-view="dashboard" onclick="navigateTo('dashboard')">
+        <i data-lucide="layout-dashboard" class="icon"></i> Dashboard
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Gestione</div>
+      <a class="nav-item" data-view="progetti" onclick="navigateTo('progetti')">
+        <i data-lucide="folder-kanban" class="icon"></i> Progetti
+      </a>
+      <a class="nav-item" data-view="offerte" onclick="navigateTo('offerte')">
+        <i data-lucide="file-text" class="icon"></i> Offerte
+      </a>
+      <a class="nav-item" data-view="attivita" onclick="navigateTo('attivita')">
+        <i data-lucide="check-square" class="icon"></i> Attività
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Anagrafiche</div>
+      <a class="nav-item" data-view="clienti" onclick="navigateTo('clienti')">
+        <i data-lucide="users" class="icon"></i> Clienti
+      </a>
+      <a class="nav-item" data-view="contatti" onclick="navigateTo('contatti')">
+        <i data-lucide="contact" class="icon"></i> Contatti
+      </a>
+      <a class="nav-item" data-view="fornitori" onclick="navigateTo('fornitori')">
+        <i data-lucide="truck" class="icon"></i> Fornitori
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Sistema</div>
+      <a class="nav-item" data-view="log" onclick="navigateTo('log')">
+        <i data-lucide="scroll-text" class="icon"></i> Log
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <span id="user-label">Utente</span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">Esci</button>
+    </div>
+  </nav>
+
+  <!-- ─── Main ─────────────────────────────────────── -->
+  <div id="main">
+    <!-- Topbar -->
+    <header id="topbar">
+      <button id="menu-toggle" title="Menu">☰</button>
+      <h2 id="page-title">Dashboard</h2>
+    </header>
+
+    <!-- Contenuto pagina -->
+    <main id="content">
+      <div class="loader"><div class="spinner"></div></div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL GLOBALE
+═══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title"></span>
+      <button class="btn-icon" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TOAST CONTAINER
+═══════════════════════════════════════════ -->
+<div id="toast-container"></div>
+
+<script type="module" src="/static/js/app.js"></script>
+<script>
+  // Inizializza Lucide Icons dopo il caricamento
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.lucide) lucide.createIcons();
+  });
+  // Re-inizializza dopo aggiornamenti DOM dinamici
+  window._refreshIcons = () => { if (window.lucide) lucide.createIcons(); };
+</script>
+</body>
+</html>
