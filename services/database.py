@@ -8,9 +8,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 _url = os.getenv("DATABASE_URL", "sqlite:///./crm.db")
-# SQLAlchemy richiede il dialetto esplicito
+# SQLAlchemy richiede il dialetto esplicito (gestisce sia postgres:// che postgresql://)
 if _url.startswith("postgresql://"):
     _url = _url.replace("postgresql://", "postgresql+psycopg2://", 1)
+elif _url.startswith("postgres://"):
+    _url = _url.replace("postgres://", "postgresql+psycopg2://", 1)
 
 engine = create_engine(_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
