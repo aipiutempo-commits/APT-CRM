@@ -397,6 +397,7 @@ async function renderEntityTable(el, entity) {
               ${isProgetti ? `<button class="view-toggle-btn" data-view="gantt" onclick="switchView('${entity}','gantt')"><i data-lucide="gantt-chart" style="width:14px;height:14px;display:inline;vertical-align:-2px"></i> Gantt</button>` : ''}
             </div>` : ''}
           <button class="btn btn-primary btn-sm" onclick="openCreateModal('${entity}')">+ Nuovo</button>
+          ${entity === 'contatti' ? `<button class="btn btn-ghost btn-sm" onclick="syncGoogleContacts()" title="Sincronizza da Google Workspace"><i data-lucide="refresh-cw" style="width:14px;height:14px"></i> Google</button>` : ''}
           <button class="btn btn-ghost btn-sm" onclick="scaricaTemplateCSV('${entity}')" title="Scarica template CSV"><i data-lucide="download" style="width:14px;height:14px"></i></button>
           <button class="btn btn-ghost btn-sm" onclick="importaCSV('${entity}')" title="Importa CSV"><i data-lucide="upload" style="width:14px;height:14px"></i> CSV</button>
           <input type="file" id="csv-input-${entity}" accept=".csv" style="display:none" onchange="handleCSVUpload(event,'${entity}')">
@@ -1703,6 +1704,30 @@ function esc(str) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+
+// ─── Sync Google Contacts ─────────────────────────────────────────────────
+window.syncGoogleContacts = async function() {
+  const token = localStorage.getItem('crm_token');
+  toast('Sincronizzazione in corso…', 'info');
+  try {
+    const res = await fetch('/api/sync/google-contacts', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `Errore ${res.status}`);
+    }
+    const data = await res.json();
+    const msg = `Google Contacts: ${data.synced} nuovi, ${data.updated} aggiornati, ${data.skipped} saltati`;
+    toast(msg, 'success');
+    if (data.errors?.length) console.warn('[Sync] Errori:', data.errors);
+    _cachedData['contatti'] = null;
+    await renderEntityTable(document.getElementById('content'), 'contatti');
+  } catch (e) {
+    toast(e.message || 'Errore sync Google', 'error');
+  }
+};
 
 // ─── Import / Export CSV ───────────────────────────────────────────────────
 window.scaricaTemplateCSV = function(entity) {
