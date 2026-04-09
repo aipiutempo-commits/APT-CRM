@@ -397,6 +397,9 @@ async function renderEntityTable(el, entity) {
               ${isProgetti ? `<button class="view-toggle-btn" data-view="gantt" onclick="switchView('${entity}','gantt')"><i data-lucide="gantt-chart" style="width:14px;height:14px;display:inline;vertical-align:-2px"></i> Gantt</button>` : ''}
             </div>` : ''}
           <button class="btn btn-primary btn-sm" onclick="openCreateModal('${entity}')">+ Nuovo</button>
+          <button class="btn btn-ghost btn-sm" onclick="scaricaTemplateCSV('${entity}')" title="Scarica template CSV"><i data-lucide="download" style="width:14px;height:14px"></i></button>
+          <button class="btn btn-ghost btn-sm" onclick="importaCSV('${entity}')" title="Importa CSV"><i data-lucide="upload" style="width:14px;height:14px"></i> CSV</button>
+          <input type="file" id="csv-input-${entity}" accept=".csv" style="display:none" onchange="handleCSVUpload(event,'${entity}')">
         </div>
       </div>
       <div class="toolbar" id="toolbar-${entity}">
@@ -1700,3 +1703,54 @@ function esc(str) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+
+// ─── Import / Export CSV ───────────────────────────────────────────────────
+window.scaricaTemplateCSV = function(entity) {
+  const token = localStorage.getItem('crm_token');
+  const a = document.createElement('a');
+  a.href = `/api/import/${entity}/template`;
+  // Aggiungi token come query param temporaneo non è possibile con fetch redirect
+  // Uso fetch + blob download
+  fetch(`/api/import/${entity}/template`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  }).then(r => r.blob()).then(blob => {
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = `template_${entity}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }).catch(() => toast('Errore download template', 'error'));
+};
+
+window.importaCSV = function(entity) {
+  document.getElementById(`csv-input-${entity}`)?.click();
+};
+
+window.handleCSVUpload = async function(event, entity) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  event.target.value = '';
+
+  const token = localStorage.getItem('crm_token');
+  const formData = new FormData();
+  formData.append('file', file);
+
+  toast('Importazione in corso…', 'info');
+  try {
+    const res = await fetch(`/api/import/${entity}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`Errore ${res.status}`);
+    const data = await res.json();
+    toast(`Importati ${data.imported} record${data.skipped ? `, ${data.skipped} saltati` : ''}`, 'success');
+    if (data.errors?.length) {
+      console.warn('[CSV Import] Errori:', data.errors);
+    }
+    _cachedData[entity] = null;
+    await renderEntityTable(document.getElementById('content'), entity);
+  } catch (e) {
+    toast(e.message || 'Errore importazione', 'error');
+  }
+};

@@ -1515,8 +1515,8 @@ select option { background: rgba(255,255,255,.6); color: var(--text); }
   }
 
   #sidebar.open { transform: translateX(0); }
-  #overlay { display: block; }
-  #overlay.visible { display: block; opacity: 1; }
+  #overlay { display: none; pointer-events: none; }
+  #overlay.visible { display: block; pointer-events: all; opacity: 1; }
 
   #content { padding: 8px 14px 20px; }
   #topbar  { padding: 0 14px; }

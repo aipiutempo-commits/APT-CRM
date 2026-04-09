@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 # Carica le variabili d'ambiente dal file .env
 load_dotenv()
 
-from routers import auth, clients, dashboard, logs, offers, projects, suppliers, tasks, contatti
+from routers import auth, clients, dashboard, logs, offers, projects, suppliers, tasks, contatti, import_csv
 from services.database import init_db
 
 # ─── Lifespan (avvio / spegnimento) ─────────────────────────────────────────
@@ -62,6 +62,7 @@ app.include_router(offers.router)
 app.include_router(tasks.router)
 app.include_router(logs.router)
 app.include_router(contatti.router)
+app.include_router(import_csv.router)
 
 # ─── File statici (frontend PWA) ─────────────────────────────────────────────
 
