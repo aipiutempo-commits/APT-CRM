@@ -324,11 +324,9 @@ const ENTITY_CONFIG = {
       { key: 'priorita',       label: 'Priorità', badge: 'priorita', mobile: false },
     ],
     fields: [
-      { key: 'progetto_id',          label: 'ID Progetto',    type: 'text' },
-      { key: 'progetto_nome',        label: 'Nome Progetto',  type: 'text' },
+      { key: 'progetto_nome',  label: 'Progetto',  type: 'project-search',  span: 2 },
       { key: 'tipo', label: 'Tipo', type: 'select', options: ['Elettrico','Software','Civile','Altro'] },
-      { key: 'fornitore_id',         label: 'ID Fornitore',   type: 'text' },
-      { key: 'fornitore_nome',       label: 'Nome Fornitore', type: 'text' },
+      { key: 'fornitore_nome', label: 'Fornitore', type: 'supplier-search', span: 2 },
       { key: 'descrizione',          label: 'Descrizione',    type: 'textarea', span: 2 },
       { key: 'data_invio_richiesta', label: 'Data Invio',     type: 'date' },
       { key: 'scadenza_attesa',      label: 'Scadenza Attesa',type: 'date' },
@@ -357,10 +355,9 @@ const ENTITY_CONFIG = {
       { key: 'priorita',      label: 'Priorità', badge: 'priorita', mobile: false },
     ],
     fields: [
-      { key: 'titolo',        label: 'Titolo',        type: 'text', required: true, span: 2 },
-      { key: 'progetto_id',   label: 'ID Progetto',   type: 'text' },
-      { key: 'progetto_nome', label: 'Nome Progetto', type: 'text' },
-      { key: 'assegnato_a',   label: 'Assegnato a',   type: 'text' },
+      { key: 'titolo',        label: 'Titolo',    type: 'text', required: true, span: 2 },
+      { key: 'progetto_nome', label: 'Progetto',  type: 'project-search', span: 2 },
+      { key: 'assegnato_a',   label: 'Assegnato a', type: 'text' },
       { key: 'data_inizio',   label: 'Data Inizio',   type: 'date' },
       { key: 'data_fine',     label: 'Data Fine',     type: 'date' },
       { key: 'scadenza',      label: 'Scadenza',      type: 'date' },
@@ -1455,7 +1452,8 @@ window.deleteContatto = async function(contattoId, clienteId) {
 };
 
 // ─── Prefilled modal ───────────────────────────────────────────────────────
-window.openCreateModalPrefilled = function(entity, progettoId, progettoNome) {
+window.openCreateModalPrefilled = async function(entity, progettoId, progettoNome) {
+  await Promise.all(_relCaches(entity));
   openModal(entity, { progetto_id: progettoId, progetto_nome: progettoNome });
 };
 
@@ -1513,9 +1511,19 @@ async function renderLog(el) {
 }
 
 // ─── Modal Create/Edit ─────────────────────────────────────────────────────
-window.openCreateModal = function(entity) { openModal(entity, null); };
-window.openEditModal   = function(entity, id) {
-  _ensureCache(entity).then(items => {
+function _relCaches(entity) {
+  const cfg = ENTITY_CONFIG[entity];
+  const loads = [];
+  if (cfg.fields.some(f => f.type === 'project-search'))  loads.push(_ensureCache('progetti'));
+  if (cfg.fields.some(f => f.type === 'supplier-search')) loads.push(_ensureCache('fornitori'));
+  return loads;
+}
+window.openCreateModal = async function(entity) {
+  await Promise.all(_relCaches(entity));
+  openModal(entity, null);
+};
+window.openEditModal   = async function(entity, id) {
+  const [items] = await Promise.all([_ensureCache(entity), ..._relCaches(entity)]);
     const item = items.find(i => i.id === id);
     openModal(entity, item || { id });
   });
@@ -1535,6 +1543,34 @@ function openModal(entity, data) {
     if (f.type === 'select') {
       const opts = f.options.map(o => `<option value="${o}" ${String(val)===o?'selected':''}>${o}</option>`).join('');
       return `<div class="form-group ${spanClass}"><label>${f.label}</label><select name="${f.key}">${opts}</select></div>`;
+    }
+    if (f.type === 'project-search') {
+      const progetti = (_cachedData['progetti'] || []);
+      const listId = `datalist-proj-${Math.random().toString(36).slice(2,7)}`;
+      const hiddenVal = data?.progetto_id || '';
+      const opts = progetti.map(p => `<option value="${esc(p.nome)}" data-id="${esc(p.id)}"></option>`).join('');
+      return `<div class="form-group ${spanClass}">
+        <label>${f.label}</label>
+        <input type="text" name="progetto_nome" value="${esc(String(val))}"
+               list="${listId}" autocomplete="off" placeholder="Cerca progetto…"
+               oninput="_onRelSearch(this,'progetti','nome','progetto_id')">
+        <datalist id="${listId}">${opts}</datalist>
+        <input type="hidden" name="progetto_id" value="${esc(String(hiddenVal))}">
+      </div>`;
+    }
+    if (f.type === 'supplier-search') {
+      const fornitori = (_cachedData['fornitori'] || []);
+      const listId = `datalist-sup-${Math.random().toString(36).slice(2,7)}`;
+      const hiddenVal = data?.fornitore_id || '';
+      const opts = fornitori.map(p => `<option value="${esc(p.ragione_sociale)}" data-id="${esc(p.id)}"></option>`).join('');
+      return `<div class="form-group ${spanClass}">
+        <label>${f.label}</label>
+        <input type="text" name="fornitore_nome" value="${esc(String(val))}"
+               list="${listId}" autocomplete="off" placeholder="Cerca fornitore…"
+               oninput="_onRelSearch(this,'fornitori','ragione_sociale','fornitore_id')">
+        <datalist id="${listId}">${opts}</datalist>
+        <input type="hidden" name="fornitore_id" value="${esc(String(hiddenVal))}">
+      </div>`;
     }
     if (f.type === 'date') {
       let dv = String(val);
@@ -1704,6 +1740,16 @@ function esc(str) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+
+// ─── Relation search helper (project/supplier autocomplete) ───────────────
+window._onRelSearch = function(input, cacheKey, nameField, hiddenName) {
+  const items = _cachedData[cacheKey] || [];
+  const match = items.find(i => i[nameField] === input.value);
+  // Cerca il campo hidden nello stesso form-group o nel form
+  const form = input.closest('form');
+  const hidden = form?.querySelector(`input[type="hidden"][name="${hiddenName}"]`);
+  if (hidden) hidden.value = match ? match.id : '';
+};
 
 // ─── Sync Google Contacts ─────────────────────────────────────────────────
 window.syncGoogleContacts = async function() {
