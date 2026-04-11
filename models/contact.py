@@ -5,6 +5,8 @@ from typing import Optional
 class ContattoBase(BaseModel):
     cliente_id: Optional[str] = ""
     cliente_nome: Optional[str] = ""
+    fornitore_id: Optional[str] = ""
+    fornitore_nome: Optional[str] = ""
     nome: str
     cognome: Optional[str] = ""
     ruolo: Optional[str] = ""
@@ -20,6 +22,8 @@ class ContattoCreate(ContattoBase):
 class ContattoUpdate(BaseModel):
     cliente_id: Optional[str] = None
     cliente_nome: Optional[str] = None
+    fornitore_id: Optional[str] = None
+    fornitore_nome: Optional[str] = None
     nome: Optional[str] = None
     cognome: Optional[str] = None
     ruolo: Optional[str] = None

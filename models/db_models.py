@@ -40,6 +40,8 @@ class Contatto(Base):
     id = Column(String(20), primary_key=True, default=_id)
     cliente_id = Column(String(20), nullable=True, default="")
     cliente_nome = Column(String(255), default="")
+    fornitore_id = Column(String(20), nullable=True, default="")
+    fornitore_nome = Column(String(255), default="")
     nome = Column(String(100), nullable=False)
     cognome = Column(String(100), nullable=False, default="")
     ruolo = Column(String(150), default="")

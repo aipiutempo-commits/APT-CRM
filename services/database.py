@@ -72,7 +72,28 @@ def init_db():
     """Crea tutte le tabelle e il primo utente admin."""
     from models import db_models  # noqa: assicura che i modelli siano importati
     Base.metadata.create_all(bind=engine, checkfirst=True)
+    _migrate()
     _seed_admin()
+
+
+def _migrate():
+    """Aggiunge colonne mancanti senza ricreare le tabelle (schema migrations)."""
+    migrations = [
+        "ALTER TABLE contatti ADD COLUMN IF NOT EXISTS fornitore_id VARCHAR(20) DEFAULT ''",
+        "ALTER TABLE contatti ADD COLUMN IF NOT EXISTS fornitore_nome VARCHAR(255) DEFAULT ''",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(_text(sql))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+
+def _text(sql: str):
+    from sqlalchemy import text
+    return text(sql)
 
 
 def _seed_admin():

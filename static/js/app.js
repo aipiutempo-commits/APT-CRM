@@ -251,21 +251,22 @@ const ENTITY_CONFIG = {
     fetchAll: api.getContatti, create: api.creaContatto,
     update: api.updateContatto, delete: api.deleteContatto,
     columns: [
-      { key: '_nome_completo', label: 'Nome',       sortable: true, computed: r => `${r.nome||''} ${r.cognome||''}`.trim() },
-      { key: 'ruolo',          label: 'Ruolo',      sortable: true },
-      { key: 'cliente_nome',   label: 'Cliente',    sortable: true, clienteLink: true },
-      { key: 'email',          label: 'Email',      mobile: false },
-      { key: 'telefono',       label: 'Telefono',   mobile: false },
+      { key: '_nome_completo',  label: 'Nome',       sortable: true, computed: r => `${r.nome||''} ${r.cognome||''}`.trim() },
+      { key: 'ruolo',           label: 'Ruolo',      sortable: true },
+      { key: 'cliente_nome',    label: 'Cliente',    sortable: true, clienteLink: true },
+      { key: 'fornitore_nome',  label: 'Fornitore',  sortable: true, mobile: false },
+      { key: 'email',           label: 'Email',      mobile: false },
+      { key: 'telefono',        label: 'Telefono',   mobile: false },
     ],
     fields: [
-      { key: 'nome',         label: 'Nome',     type: 'text', required: true },
-      { key: 'cognome',      label: 'Cognome',  type: 'text', required: true },
-      { key: 'ruolo',        label: 'Ruolo',    type: 'text' },
-      { key: 'cliente_id',   label: 'ID Cliente', type: 'text' },
-      { key: 'cliente_nome', label: 'Cliente',  type: 'text' },
-      { key: 'email',        label: 'Email',    type: 'email' },
-      { key: 'telefono',     label: 'Telefono', type: 'tel' },
-      { key: 'note',         label: 'Note',     type: 'textarea', span: 2 },
+      { key: 'nome',           label: 'Nome',      type: 'text', required: true },
+      { key: 'cognome',        label: 'Cognome',   type: 'text' },
+      { key: 'ruolo',          label: 'Ruolo',     type: 'text' },
+      { key: 'email',          label: 'Email',     type: 'email' },
+      { key: 'telefono',       label: 'Telefono',  type: 'tel' },
+      { key: 'cliente_nome',   label: 'Cliente',   type: 'client-search',   span: 2 },
+      { key: 'fornitore_nome', label: 'Fornitore', type: 'supplier-search', span: 2 },
+      { key: 'note',           label: 'Note',      type: 'textarea', span: 2 },
     ],
     filterKey: '_nome_completo', title: 'contatto',
   },
@@ -1377,35 +1378,66 @@ function _renderContattiList(contatti, clienteId) {
   }).join('');
 }
 
-window.openContattoModal = function(contattoId, clienteId, clienteNome) {
+window.openContattoModal = async function(contattoId, clienteId, clienteNome) {
   const contatto = contattoId
     ? (_cachedData['contatti'] || []).find(c => c.id === contattoId) || {}
     : {};
   const isEdit = Boolean(contattoId);
   const ruoliOptions = RUOLI_CONTATTO.map(r => `<option value="${r}">`).join('');
+
+  // Carica cache clienti e fornitori per autocomplete
+  await Promise.all([_ensureCache('clienti'), _ensureCache('fornitori')]);
+  const clienti = _cachedData['clienti'] || [];
+  const fornitori = _cachedData['fornitori'] || [];
+  const cliOpts = clienti.map(c => `<option value="${esc(c.ragione_sociale)}" data-id="${esc(c.id)}"></option>`).join('');
+  const supOpts = fornitori.map(f => `<option value="${esc(f.ragione_sociale)}" data-id="${esc(f.id)}"></option>`).join('');
+
+  // Valori iniziali collegamento
+  const initCliNome = clienteNome || contatto.cliente_nome || '';
+  const initCliId   = clienteId   || contatto.cliente_id   || '';
+  const initSupNome = contatto.fornitore_nome || '';
+  const initSupId   = contatto.fornitore_id   || '';
+
   showModal({
     title: isEdit ? 'Modifica contatto' : 'Nuovo contatto',
-    body: `<datalist id="ruoli-list">${ruoliOptions}</datalist>
+    body: `
+    <datalist id="ruoli-list">${ruoliOptions}</datalist>
+    <datalist id="cli-list-c">${cliOpts}</datalist>
+    <datalist id="sup-list-c">${supOpts}</datalist>
     <form id="contatto-form" class="form-grid col2">
       <div class="form-group"><label>Nome *</label><input type="text" name="nome" value="${esc(contatto.nome||'')}" required></div>
-      <div class="form-group"><label>Cognome *</label><input type="text" name="cognome" value="${esc(contatto.cognome||'')}" required></div>
+      <div class="form-group"><label>Cognome</label><input type="text" name="cognome" value="${esc(contatto.cognome||'')}"></div>
       <div class="form-group"><label>Ruolo</label><input type="text" name="ruolo" value="${esc(contatto.ruolo||'')}" list="ruoli-list" autocomplete="off"></div>
       <div class="form-group"><label>Email</label><input type="email" name="email" value="${esc(contatto.email||'')}"></div>
       <div class="form-group"><label>Telefono</label><input type="tel" name="telefono" value="${esc(contatto.telefono||'')}"></div>
+      <div class="form-group">
+        <label>Cliente</label>
+        <input type="text" name="cliente_nome" value="${esc(initCliNome)}"
+               list="cli-list-c" autocomplete="off" placeholder="Cerca cliente…"
+               oninput="_onRelSearch(this,'clienti','ragione_sociale','cliente_id')">
+        <input type="hidden" name="cliente_id" value="${esc(initCliId)}">
+      </div>
+      <div class="form-group">
+        <label>Fornitore</label>
+        <input type="text" name="fornitore_nome" value="${esc(initSupNome)}"
+               list="sup-list-c" autocomplete="off" placeholder="Cerca fornitore…"
+               oninput="_onRelSearch(this,'fornitori','ragione_sociale','fornitore_id')">
+        <input type="hidden" name="fornitore_id" value="${esc(initSupId)}">
+      </div>
       <div class="form-group span2"><label>Note</label><textarea name="note" rows="2">${esc(contatto.note||'')}</textarea></div>
     </form>`,
     footer: `<button class="btn btn-ghost" onclick="closeModal()">Annulla</button>
-             <button class="btn btn-primary" onclick="saveContatto('${contattoId||''}','${clienteId}','${esc(clienteNome||contatto.cliente_nome||'')}')">
+             <button class="btn btn-primary" onclick="saveContatto('${contattoId||''}')">
                ${isEdit ? 'Salva' : 'Aggiungi'}
              </button>`,
   });
 };
 
-window.saveContatto = async function(contattoId, clienteId, clienteNome) {
+window.saveContatto = async function(contattoId) {
   const form = document.getElementById('contatto-form');
   if (!form) return;
   const fd = new FormData(form);
-  const payload = { cliente_id: clienteId, cliente_nome: clienteNome };
+  const payload = {};
   for (const [k, v] of fd.entries()) payload[k] = v;
   const btn = document.querySelector('.modal-footer .btn-primary');
   btn.disabled = true;
@@ -1421,12 +1453,15 @@ window.saveContatto = async function(contattoId, clienteId, clienteNome) {
       _cachedData['contatti'].push(newC);
     }
     closeModal();
-    // Refresh contatti section
-    const updated = await api.getContattiByCliente(clienteId).catch(() => []);
-    const listEl = document.getElementById(`contatti-list-${clienteId}`);
-    if (listEl) listEl.innerHTML = _renderContattiList(updated, clienteId);
-    const countEl = document.getElementById('contatti-count');
-    if (countEl) countEl.textContent = updated.length;
+    // Refresh contatti section se siamo nel dettaglio cliente
+    const cliId = payload.cliente_id || '';
+    if (cliId) {
+      const updated = await api.getContattiByCliente(cliId).catch(() => []);
+      const listEl = document.getElementById(`contatti-list-${cliId}`);
+      if (listEl) listEl.innerHTML = _renderContattiList(updated, cliId);
+      const countEl = document.getElementById('contatti-count');
+      if (countEl) countEl.textContent = updated.length;
+    }
     toast(contattoId ? 'Contatto aggiornato' : 'Contatto aggiunto', 'success');
   } catch (e) {
     toast(e.message, 'error');
@@ -1777,15 +1812,8 @@ window._quickCreateCliente = async function(btn) {
   const ragSoc = window.prompt('Ragione sociale del nuovo cliente:');
   if (!ragSoc || !ragSoc.trim()) return;
 
-  const token = localStorage.getItem('crm_token');
   try {
-    const res = await fetch('/api/clienti', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ragione_sociale: ragSoc.trim(), stato: 'Attivo' }),
-    });
-    if (!res.ok) throw new Error(`Errore ${res.status}`);
-    const created = await res.json();
+    const created = await api.creaCliente({ ragione_sociale: ragSoc.trim() });
 
     // Aggiorna il campo testo e il campo hidden nel form corrente
     if (nomeInput) nomeInput.value = created.ragione_sociale || ragSoc.trim();
