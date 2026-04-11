@@ -300,9 +300,8 @@ const ENTITY_CONFIG = {
       { key: 'data_fine_prevista', label: 'Fine Prevista', mobile: false },
     ],
     fields: [
-      { key: 'nome',               label: 'Nome Progetto',  type: 'text', required: true },
-      { key: 'cliente_id',         label: 'ID Cliente',     type: 'text' },
-      { key: 'cliente_nome',       label: 'Nome Cliente',   type: 'text' },
+      { key: 'nome',               label: 'Nome Progetto',  type: 'text', required: true, span: 2 },
+      { key: 'cliente_nome',       label: 'Cliente',        type: 'client-search', span: 2 },
       { key: 'stato',   label: 'Stato', type: 'select', options: ['Attivo','Sospeso','Chiuso'] },
       { key: 'data_inizio',        label: 'Data Inizio',    type: 'date' },
       { key: 'data_fine_prevista', label: 'Fine Prevista',  type: 'date' },
@@ -1516,6 +1515,7 @@ function _relCaches(entity) {
   const loads = [];
   if (cfg.fields.some(f => f.type === 'project-search'))  loads.push(_ensureCache('progetti'));
   if (cfg.fields.some(f => f.type === 'supplier-search')) loads.push(_ensureCache('fornitori'));
+  if (cfg.fields.some(f => f.type === 'client-search'))   loads.push(_ensureCache('clienti'));
   return loads;
 }
 window.openCreateModal = async function(entity) {
@@ -1524,9 +1524,8 @@ window.openCreateModal = async function(entity) {
 };
 window.openEditModal   = async function(entity, id) {
   const [items] = await Promise.all([_ensureCache(entity), ..._relCaches(entity)]);
-    const item = items.find(i => i.id === id);
-    openModal(entity, item || { id });
-  });
+  const item = items.find(i => i.id === id);
+  openModal(entity, item || { id });
 };
 
 function openModal(entity, data) {
@@ -1556,6 +1555,24 @@ function openModal(entity, data) {
                oninput="_onRelSearch(this,'progetti','nome','progetto_id')">
         <datalist id="${listId}">${opts}</datalist>
         <input type="hidden" name="progetto_id" value="${esc(String(hiddenVal))}">
+      </div>`;
+    }
+    if (f.type === 'client-search') {
+      const clienti = (_cachedData['clienti'] || []);
+      const listId = `datalist-cli-${Math.random().toString(36).slice(2,7)}`;
+      const hiddenVal = data?.cliente_id || '';
+      const opts = clienti.map(c => `<option value="${esc(c.ragione_sociale)}" data-id="${esc(c.id)}"></option>`).join('');
+      return `<div class="form-group ${spanClass}">
+        <label>${f.label}</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" name="cliente_nome" value="${esc(String(val))}"
+                 list="${listId}" autocomplete="off" placeholder="Cerca cliente…" style="flex:1"
+                 oninput="_onRelSearch(this,'clienti','ragione_sociale','cliente_id')">
+          <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap"
+                  onclick="_quickCreateCliente(this)" title="Crea nuovo cliente">+ Nuovo</button>
+        </div>
+        <datalist id="${listId}">${opts}</datalist>
+        <input type="hidden" name="cliente_id" value="${esc(String(hiddenVal))}">
       </div>`;
     }
     if (f.type === 'supplier-search') {
@@ -1749,6 +1766,48 @@ window._onRelSearch = function(input, cacheKey, nameField, hiddenName) {
   const form = input.closest('form');
   const hidden = form?.querySelector(`input[type="hidden"][name="${hiddenName}"]`);
   if (hidden) hidden.value = match ? match.id : '';
+};
+
+// ─── Quick-create cliente dal form progetto ───────────────────────────────
+window._quickCreateCliente = async function(btn) {
+  const nomeInput = btn.closest('.form-group').querySelector('input[name="cliente_nome"]');
+  const hiddenInput = btn.closest('form')?.querySelector('input[type="hidden"][name="cliente_id"]');
+
+  // Mini-dialog inline
+  const ragSoc = window.prompt('Ragione sociale del nuovo cliente:');
+  if (!ragSoc || !ragSoc.trim()) return;
+
+  const token = localStorage.getItem('crm_token');
+  try {
+    const res = await fetch('/api/clienti', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ragione_sociale: ragSoc.trim(), stato: 'Attivo' }),
+    });
+    if (!res.ok) throw new Error(`Errore ${res.status}`);
+    const created = await res.json();
+
+    // Aggiorna il campo testo e il campo hidden nel form corrente
+    if (nomeInput) nomeInput.value = created.ragione_sociale || ragSoc.trim();
+    if (hiddenInput) hiddenInput.value = created.id || '';
+
+    // Invalida la cache clienti così al prossimo open sarà aggiornata
+    _cachedData['clienti'] = null;
+
+    // Aggiorna il datalist con il nuovo cliente
+    const listId = nomeInput?.getAttribute('list');
+    const dl = listId ? document.getElementById(listId) : null;
+    if (dl) {
+      const opt = document.createElement('option');
+      opt.value = created.ragione_sociale || ragSoc.trim();
+      opt.dataset.id = created.id || '';
+      dl.appendChild(opt);
+    }
+
+    toast(`Cliente "${ragSoc.trim()}" creato`, 'success');
+  } catch (e) {
+    toast(e.message || 'Errore creazione cliente', 'error');
+  }
 };
 
 // ─── Sync Google Contacts ─────────────────────────────────────────────────
